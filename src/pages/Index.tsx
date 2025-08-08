@@ -1,4 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +10,57 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Bot, Activity, Clock, AlertCircle, Play } from "lucide-react";
 
 const Index = () => {
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [session, setSession] = useState<Session | null>(null);
+
   useEffect(() => {
     document.title = "AI Agent Dashboard";
+    let meta = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.name = 'description';
+      document.head.appendChild(meta);
+    }
+    meta.content = "AI Agent Dashboard – Monitor agents, runs, and system activity";
+    let link = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'canonical';
+      document.head.appendChild(link);
+    }
+    link.href = `${window.location.origin}/`;
   }, []);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
+      setSession(sess);
+      if (!sess) {
+        navigate("/auth", { replace: true });
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (!session) {
+        navigate("/auth", { replace: true });
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({ variant: "destructive", description: error.message });
+    } else {
+      toast({ description: "Signed out" });
+      navigate("/auth", { replace: true });
+    }
+  };
 
   const stats = [
     { title: "Active Agents", value: "5", icon: Bot },
@@ -44,9 +96,18 @@ const Index = () => {
             <h1 className="text-3xl font-bold tracking-tight">AI Agent Dashboard</h1>
             <p className="text-muted-foreground">Monitor agents, runs, and system activity</p>
           </div>
-          <Button aria-label="Start new run">
-            <Play className="mr-2" /> New Run
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button aria-label="Start new run">
+              <Play className="mr-2" /> New Run
+            </Button>
+            {session ? (
+              <Button variant="outline" onClick={handleLogout}>Log out</Button>
+            ) : (
+              <Button asChild variant="outline">
+                <Link to="/auth">Log in</Link>
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
